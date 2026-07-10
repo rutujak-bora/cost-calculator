@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Freight Cost Calculator</title>
+
+<!-- SheetJS: reads .xlsx / .xls files entirely in the browser (no backend needed) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Fonts: condensed industrial display face for the "manifest" feel,
+     Inter for UI text, IBM Plex Mono for tabular numbers (ledger look) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  /* ============================================================
+     DESIGN TOKENS
+     Palette: cool steel/navy ledger + amber "customs stamp" accent
+     ============================================================ */
+  :root{
+    --ink:        #101820;   /* deep navy-black, headers & primary text */
+    --steel:      #2C4356;   /* steel blue, primary brand */
+    --steel-dark: #1B2C3A;
+    --paper:      #EEF1EF;   /* cool paper background */
+    --card:       #FFFFFF;
+    --line:       #CBD2CE;   /* hairline rules */
+    --line-soft:  #E2E6E3;
+    --accent:     #E8A33D;   /* amber stamp accent */
+    --accent-dark:#C7841F;
+    --danger:     #B5482A;
+    --danger-soft:#F5E3DC;
+    --muted:      #5C6B72;
+
+    --font-display: 'Big Shoulders Display', sans-serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  *{ box-sizing: border-box; }
+
+  body{
+    margin:0;
+    font-family: var(--font-body);
+    background: var(--paper);
+    color: var(--ink);
+    background-image:
+      linear-gradient(var(--line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: -1px -1px;
+  }
+
+  /* ============================================================
+     HEADER
+     ============================================================ */
+  header.topbar{
+    background: var(--ink);
+    color: #fff;
+    padding: 22px 28px;
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    border-bottom: 4px solid var(--accent);
+  }
+  header.topbar .brand{
+    display:flex;
+    align-items:baseline;
+    gap: 10px;
+  }
+  header.topbar h1{
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 30px;
+    letter-spacing: 0.5px;
+    margin:0;
+    text-transform: uppercase;
+  }
+  header.topbar .tag{
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    border: 1px solid var(--accent);
+    padding: 3px 8px;
+    border-radius: 2px;
+  }
+  header.topbar p{
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: #B9C2C8;
+  }
+
+  main{
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 24px 20px 60px;
+  }
+
+  /* ============================================================
+     UPLOAD PANEL
+     ============================================================ */
+  .panel{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 20px 22px;
+    margin-bottom: 22px;
+    box-shadow: 0 1px 2px rgba(16,24,32,0.04);
+  }
+  .panel h2{
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 4px;
+    color: var(--steel-dark);
+  }
+  .panel .sub{
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0 0 16px;
+  }
+
+  .upload-row{
+    display:flex;
+    align-items:center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .file-btn{
+    position:relative;
+    overflow:hidden;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    background: var(--steel);
+    color:#fff;
+    font-weight:600;
+    font-size:14px;
+    padding: 11px 18px;
+    border-radius: 4px;
+    cursor:pointer;
+    border: none;
+    transition: background .15s ease;
+  }
+  .file-btn:hover{ background: var(--steel-dark); }
+  .file-btn input[type=file]{
+    position:absolute;
+    inset:0;
+    opacity:0;
+    cursor:pointer;
+  }
+
+  #uploadStatus{
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  #uploadStatus.ok{ color: #2E7D4F; }
+  #uploadStatus.err{ color: var(--danger); }
+
+  .sample-note{
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 12px;
+    line-height: 1.5;
+  }
+  .sample-note code{
+    background: var(--paper);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+  }
+
+  /* ============================================================
+     TABLE / MANIFEST
+     ============================================================ */
+  .table-wrap{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(16,24,32,0.04);
+  }
+  .table-head-bar{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .table-head-bar h2{
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight:700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin:0;
+    color: var(--steel-dark);
+  }
+
+  .add-row-btn{
+    background: var(--ink);
+    color:#fff;
+    border:none;
+    font-weight:600;
+    font-size: 13px;
+    padding: 10px 16px;
+    border-radius: 4px;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+  }
+  .add-row-btn:hover{ background: var(--steel-dark); }
+
+  .download-bar{
+    padding: 16px 20px 20px;
+    background: var(--card);
+    border-top: 1px solid var(--line-soft);
+    display: flex;
+    justify-content: center;
+  }
+  .download-btn{
+    background: var(--accent);
+    color: var(--ink);
+    border: none;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 12px 24px;
+    border-radius: 4px;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    width: 100%;
+    max-width: 360px;
+    justify-content: center;
+  }
+  .download-btn:hover{ background: var(--accent-dark); }
+  .download-btn:disabled{
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  table{
+    width:100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  thead th{
+    text-align:left;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    background: var(--paper);
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  tbody td{
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: middle;
+  }
+  tbody tr:hover{ background: #FAFBFA; }
+
+  .row-index{
+    font-family: var(--font-mono);
+    color: var(--muted);
+    font-size: 13px;
+    width: 34px;
+  }
+
+  input.product-input, input.dim-input, input.qty-input{
+    width: 100%;
+    font-family: var(--font-body);
+    font-size: 14px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #fff;
+    color: var(--ink);
+  }
+  input.product-input{ min-width: 170px; }
+
+  /* Custom searchable dropdown (replaces native <datalist>, which iOS
+     Safari ignores entirely and Android support is inconsistent) */
+  .product-search{ position: relative; }
+  .product-dropdown{
+    display:none;
+    position:absolute;
+    top: calc(100% + 4px);
+    left:0;
+    right:0;
+    z-index: 40;
+    background:#fff;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    max-height: 220px;
+    overflow-y:auto;
+    box-shadow: 0 4px 10px rgba(16,24,32,0.12);
+  }
+  .product-dropdown.open{ display:block; }
+  .product-option{
+    padding: 9px 12px;
+    font-size: 13px;
+    cursor:pointer;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .product-option:last-child{ border-bottom:none; }
+  .product-option:hover, .product-option.active{ background: var(--paper); }
+  .product-option .dims{
+    display:block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .product-dropdown .no-match{
+    padding: 9px 12px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  input.dim-input{
+    width: 74px;
+    font-family: var(--font-mono);
+    background: var(--paper);
+    color: var(--muted);
+  }
+  input.qty-input{
+    width: 84px;
+    font-family: var(--font-mono);
+  }
+  input.dim-input:focus, input.qty-input:focus, input.product-input:focus{
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-color: var(--accent);
+  }
+
+  .cbm-value, .freight-value{
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .freight-value{ color: var(--steel-dark); }
+
+  .remove-btn{
+    background: var(--danger-soft);
+    color: var(--danger);
+    border: 1px solid transparent;
+    width: 30px;
+    height: 30px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    font-weight: 700;
+  }
+  .remove-btn:hover{ background: var(--danger); color:#fff; }
+
+  /* ============================================================
+     GRAND TOTAL — "customs stamp" signature element
+     ============================================================ */
+  .total-bar{
+    display:flex;
+    align-items:center;
+    justify-content: flex-end;
+    gap: 20px;
+    padding: 22px 24px;
+    background: var(--ink);
+    flex-wrap: wrap;
+  }
+  .total-bar .total-label{
+    font-family: var(--font-mono);
+    color: #B9C2C8;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+  .stamp{
+    position:relative;
+    display:inline-flex;
+    align-items:center;
+    gap: 10px;
+    border: 3px solid var(--accent);
+    border-radius: 999px;
+    padding: 10px 22px;
+    transform: rotate(-2deg);
+    color: var(--accent);
+  }
+  .stamp .stamp-value{
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+  }
+  .stamp .stamp-unit{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--accent);
+    opacity: 0.85;
+  }
+
+  /* empty state */
+  .empty-state{
+    padding: 40px 20px;
+    text-align:center;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  footer{
+    text-align:center;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 24px 0 10px;
+  }
+
+  /* ============================================================
+     RESPONSIVE — collapse table into stacked "manifest cards"
+     ============================================================ */
+  @media (max-width: 760px){
+    header.topbar{ padding: 18px 18px; }
+    header.topbar h1{ font-size: 24px; }
+    main{ padding: 18px 12px 50px; }
+
+    thead{ display:none; }
+    table, tbody, tr, td{ display:block; width:100%; }
+    tbody tr{
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      margin: 12px 14px;
+      padding: 6px 0;
+      background: #fff;
+    }
+    tbody td{
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px dashed var(--line-soft);
+      padding: 8px 14px;
+    }
+    tbody td:last-child{ border-bottom:none; }
+    tbody td::before{
+      content: attr(data-label);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--muted);
+      flex: 0 0 auto;
+    }
+    input.product-input, input.dim-input, input.qty-input{
+      width: 140px;
+      text-align: right;
+    }
+    .total-bar{ justify-content: center; text-align:center; }
+  }
+</style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div>
+      <div class="brand">
+        <h1>Freight Cost Calculator</h1>
+        <span class="tag">CBM · Manifest</span>
+      </div>
+      <p>Upload a product list, select items, and calculate freight volume by container load.</p>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ============================================================
+         PANEL 1: Excel upload
+         ============================================================ -->
+    <section class="panel">
+      <h2>1. Load Product Dimensions</h2>
+      <p class="sub">Upload an Excel file (.xlsx or .xls) containing your product catalog.</p>
+
+      <div class="upload-row">
+        <button class="file-btn" type="button">
+          Choose Excel File
+          <input type="file" id="excelFile" accept=".xlsx,.xls" />
+        </button>
+        <span id="uploadStatus">No file uploaded yet.</span>
+      </div>
+
+      <p class="sample-note">
+        Expected columns (any order, header text is matched loosely):
+        <code>Product Name</code>, <code>Length (L)</code>, <code>Width (W)</code>, <code>Height (H)</code>.
+        Dimensions should be in centimetres.
+      </p>
+    </section>
+
+    <!-- ============================================================
+         PANEL 2: Calculation table
+         ============================================================ -->
+    <section class="table-wrap">
+      <div class="table-head-bar">
+        <h2>2. Freight Volume Manifest</h2>
+        <button class="add-row-btn" id="addRowBtn" type="button">+ Add Row</button>
+      </div>
+
+      <table id="calcTable">
+        <thead>
+          <tr>
+            <th class="row-index">#</th>
+            <th style="min-width:190px;">Product Name</th>
+            <th>Length (cm)</th>
+            <th>Width (cm)</th>
+            <th>Height (cm)</th>
+            <th>CBM (m³)</th>
+            <th>Quantity</th>
+            <th>Freight Volume (m³)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <!-- rows injected by JS -->
+        </tbody>
+      </table>
+
+      <div id="emptyState" class="empty-state" style="display:none;">
+        No rows yet — click <strong>+ Add Row</strong> to start, or upload a product list above.
+      </div>
+
+      <div class="total-bar">
+        <span class="total-label">Grand Total Freight Volume</span>
+        <div class="stamp">
+          <span class="stamp-value" id="grandTotal">0.0000</span>
+          <span class="stamp-unit">m³</span>
+        </div>
+      </div>
+
+      <div class="download-bar">
+        <button class="download-btn" id="downloadBtn" type="button">
+          Download Freight Calculation (.xlsx)
+        </button>
+      </div>
+    </section>
+
+    <footer>Freight Cost Calculator — all calculations run locally in your browser.</footer>
+
+  </main>
+
+<script>
+/* ==================================================================
+   FREIGHT COST CALCULATOR — application logic
+   ------------------------------------------------------------------
+   - products: array of {name, l, w, h} parsed from the uploaded Excel
+   - rows are rendered dynamically into <tbody id="tableBody">
+   - each row recalculates its own CBM / Freight Volume, and the
+     grand total is recomputed whenever any row changes
+   ================================================================== */
+
+let products = [];      // parsed from Excel: [{ name, l, w, h }, ...]
+let rowCounter = 0;     // unique id generator for rows
+
+const tableBody   = document.getElementById('tableBody');
+const emptyState  = document.getElementById('emptyState');
+const grandTotalEl= document.getElementById('grandTotal');
+const uploadStatus= document.getElementById('uploadStatus');
+
+/* ------------------------------------------------------------------
+   1. EXCEL UPLOAD
+   ------------------------------------------------------------------ */
+document.getElementById('excelFile').addEventListener('change', function (e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function (evt) {
+    try {
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+
+      // Use the first sheet in the workbook
+      const firstSheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[firstSheetName];
+
+      // Convert to an array of row objects, keyed by header text
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      const parsed = rows.map(mapRowToProduct).filter(p => p && p.name);
+
+      if (parsed.length === 0) {
+        setUploadStatus('No valid rows found. Check that your columns match the expected headers.', 'err');
+        return;
+      }
+
+      products = parsed;
+      setUploadStatus(`Loaded ${products.length} products from "${file.name}".`, 'ok');
+
+      // If the table is empty, add one starter row so the user sees it working
+      if (tableBody.children.length === 0) addRow();
+
+    } catch (err) {
+      console.error(err);
+      setUploadStatus('Could not read this file. Please upload a valid .xlsx or .xls file.', 'err');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+// Maps a loosely-matched Excel row to {name, l, w, h}, tolerant of
+// header variations like "Length (L)", "Length", "L (cm)", etc.
+function mapRowToProduct(row) {
+  const keys = Object.keys(row);
+
+  const findKey = (patterns) =>
+    keys.find(k => patterns.some(p => k.toLowerCase().replace(/[^a-z]/g, '').includes(p)));
+
+  const nameKey = findKey(['productname', 'product', 'name', 'item']);
+  const lKey    = findKey(['length', 'l']);
+  const wKey    = findKey(['width', 'w']);
+  const hKey    = findKey(['height', 'h']);
+
+  if (!nameKey) return null;
+
+  return {
+    name: String(row[nameKey]).trim(),
+    l: parseFloat(row[lKey]) || 0,
+    w: parseFloat(row[wKey]) || 0,
+    h: parseFloat(row[hKey]) || 0,
+  };
+}
+
+function setUploadStatus(msg, kind) {
+  uploadStatus.textContent = msg;
+  uploadStatus.className = kind || '';
+}
+
+/* ------------------------------------------------------------------
+   2. ROW MANAGEMENT
+   ------------------------------------------------------------------ */
+document.getElementById('addRowBtn').addEventListener('click', () => addRow());
+
+function addRow() {
+  rowCounter += 1;
+  const id = rowCounter;
+
+  const tr = document.createElement('tr');
+  tr.dataset.id = id;
+  tr.innerHTML = `
+    <td class="row-index" data-label="#">${id}</td>
+    <td data-label="Product">
+      <div class="product-search">
+        <input class="product-input" type="text" autocomplete="off" placeholder="Search product…" />
+        <div class="product-dropdown"></div>
+      </div>
+    </td>
+    <td data-label="Length (cm)"><input class="dim-input" data-dim="l" type="number" readonly /></td>
+    <td data-label="Width (cm)"><input class="dim-input" data-dim="w" type="number" readonly /></td>
+    <td data-label="Height (cm)"><input class="dim-input" data-dim="h" type="number" readonly /></td>
+    <td data-label="CBM (m³)"><span class="cbm-value">0.0000</span></td>
+    <td data-label="Quantity"><input class="qty-input" type="number" min="0" step="1" value="0" /></td>
+    <td data-label="Freight Volume (m³)"><span class="freight-value">0.0000</span></td>
+    <td data-label=""><button class="remove-btn" title="Remove row">&times;</button></td>
+  `;
+  tableBody.appendChild(tr);
+  refreshEmptyState();
+
+  const productInput = tr.querySelector('.product-input');
+  const dropdown      = tr.querySelector('.product-dropdown');
+  const qtyInput       = tr.querySelector('.qty-input');
+  const removeBtn      = tr.querySelector('.remove-btn');
+
+  // Fills L/W/H from a chosen product and recalculates CBM / Freight Volume.
+  function selectProduct(p) {
+    productInput.value = p.name;
+    tr.querySelector('[data-dim="l"]').value = p.l;
+    tr.querySelector('[data-dim="w"]').value = p.w;
+    tr.querySelector('[data-dim="h"]').value = p.h;
+    closeDropdown();
+    recalcRow(tr);
+  }
+
+  function clearDims() {
+    tr.querySelector('[data-dim="l"]').value = '';
+    tr.querySelector('[data-dim="w"]').value = '';
+    tr.querySelector('[data-dim="h"]').value = '';
+    recalcRow(tr);
+  }
+
+  function closeDropdown() {
+    dropdown.classList.remove('open');
+    dropdown.innerHTML = '';
+  }
+
+  // Renders the filtered product list below the input. Shows the full
+  // catalog on focus (empty query), narrows as the user types.
+  function openDropdown() {
+    if (products.length === 0) {
+      dropdown.innerHTML = '<div class="no-match">Upload an Excel file above to search products.</div>';
+      dropdown.classList.add('open');
+      return;
+    }
+    const query = productInput.value.trim().toLowerCase();
+    const matches = query
+      ? products.filter(p => p.name.toLowerCase().includes(query))
+      : products;
+
+    if (matches.length === 0) {
+      dropdown.innerHTML = '<div class="no-match">No matching products.</div>';
+      dropdown.classList.add('open');
+      return;
+    }
+
+    dropdown.innerHTML = matches.map(p =>
+      `<div class="product-option" data-name="${p.name.replace(/"/g, '&quot;')}">
+        ${p.name}
+        <span class="dims">L ${p.l} × W ${p.w} × H ${p.h} cm</span>
+      </div>`
+    ).join('');
+    dropdown.classList.add('open');
+
+    dropdown.querySelectorAll('.product-option').forEach(opt => {
+      // mousedown (not click) fires before the input's blur event,
+      // so the selection registers before the dropdown closes on blur
+      opt.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const match = products.find(p => p.name === opt.dataset.name);
+        if (match) selectProduct(match);
+      });
+    });
+  }
+
+  productInput.addEventListener('focus', openDropdown);
+  productInput.addEventListener('input', () => {
+    openDropdown();
+    // Only auto-fill if what's typed is an exact match; otherwise clear
+    // dimensions so a half-typed product doesn't carry stale numbers.
+    const exact = products.find(p => p.name.toLowerCase() === productInput.value.trim().toLowerCase());
+    if (exact) {
+      tr.querySelector('[data-dim="l"]').value = exact.l;
+      tr.querySelector('[data-dim="w"]').value = exact.w;
+      tr.querySelector('[data-dim="h"]').value = exact.h;
+      recalcRow(tr);
+    } else {
+      clearDims();
+    }
+  });
+  productInput.addEventListener('blur', closeDropdown);
+
+  qtyInput.addEventListener('input', () => recalcRow(tr));
+
+  removeBtn.addEventListener('click', () => {
+    tr.remove();
+    refreshEmptyState();
+    recalcGrandTotal();
+  });
+}
+
+function refreshEmptyState() {
+  emptyState.style.display = tableBody.children.length === 0 ? 'block' : 'none';
+}
+
+/* ------------------------------------------------------------------
+   4. DOWNLOAD RESULTS
+   Exports the current table (one row per product line + a grand
+   total row) as a .xlsx file using SheetJS, entirely client-side.
+   ------------------------------------------------------------------ */
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  const rows = Array.from(tableBody.querySelectorAll('tr'));
+
+  if (rows.length === 0) {
+    alert('Add at least one row before downloading.');
+    return;
+  }
+
+  const exportData = rows.map((tr, i) => ({
+    '#': i + 1,
+    'Product Name': tr.querySelector('.product-input').value || '',
+    'Length (cm)': parseFloat(tr.querySelector('[data-dim="l"]').value) || 0,
+    'Width (cm)': parseFloat(tr.querySelector('[data-dim="w"]').value) || 0,
+    'Height (cm)': parseFloat(tr.querySelector('[data-dim="h"]').value) || 0,
+    'CBM (m3)': parseFloat(tr.querySelector('.cbm-value').textContent) || 0,
+    'Quantity': parseFloat(tr.querySelector('.qty-input').value) || 0,
+    'Freight Volume (m3)': parseFloat(tr.querySelector('.freight-value').textContent) || 0,
+  }));
+
+  // Append a blank spacer row, then the grand total, so it's visually
+  // separated from the line items when opened in Excel.
+  exportData.push({});
+  exportData.push({
+    'Product Name': 'Grand Total',
+    'Freight Volume (m3)': parseFloat(grandTotalEl.textContent) || 0,
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(exportData);
+  worksheet['!cols'] = [
+    { wch: 4 }, { wch: 24 }, { wch: 12 }, { wch: 12 },
+    { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 18 },
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Freight Calculation');
+
+  const timestamp = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(workbook, `freight-calculation-${timestamp}.xlsx`);
+});
+
+/* ------------------------------------------------------------------
+   3. CALCULATIONS
+   CBM = (Length × Width × Height) / 1,000,000
+   Freight Volume = CBM × Quantity
+   ------------------------------------------------------------------ */
+function recalcRow(tr) {
+  const l = parseFloat(tr.querySelector('[data-dim="l"]').value) || 0;
+  const w = parseFloat(tr.querySelector('[data-dim="w"]').value) || 0;
+  const h = parseFloat(tr.querySelector('[data-dim="h"]').value) || 0;
+  const qty = parseFloat(tr.querySelector('.qty-input').value) || 0;
+
+  const cbm = (l * w * h) / 1000000;
+  const freight = cbm * qty;
+
+  tr.querySelector('.cbm-value').textContent = cbm.toFixed(4);
+  tr.querySelector('.freight-value').textContent = freight.toFixed(4);
+
+  recalcGrandTotal();
+}
+
+function recalcGrandTotal() {
+  let total = 0;
+  tableBody.querySelectorAll('tr').forEach(tr => {
+    total += parseFloat(tr.querySelector('.freight-value').textContent) || 0;
+  });
+  grandTotalEl.textContent = total.toFixed(4);
+}
+
+/* ------------------------------------------------------------------
+   INIT — start with two empty rows so the UI isn't blank on load
+   ------------------------------------------------------------------ */
+addRow();
+addRow();
+refreshEmptyState();
+</script>
+
+</body>
+</html>
