@@ -465,6 +465,139 @@
     }
     .total-bar{ justify-content: center; text-align:center; }
   }
+
+  /* ============================================================
+     ADMIN SETTINGS MODAL & BUTTON
+     ============================================================ */
+  .settings-btn {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.2s ease;
+  }
+  .settings-btn:hover {
+    background: var(--accent);
+    color: var(--ink);
+  }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(16, 24, 32, 0.75);
+    backdrop-filter: blur(4px);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.open {
+    display: flex;
+  }
+  .modal-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 460px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    overflow: hidden;
+    animation: modalSlideUp 0.2s ease-out;
+  }
+  @keyframes modalSlideUp {
+    from { transform: translateY(15px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .modal-header {
+    background: var(--ink);
+    color: #fff;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .modal-header h3 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .close-modal {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 24px;
+    cursor: pointer;
+    line-height: 1;
+    opacity: 0.7;
+    transition: opacity 0.15s ease;
+  }
+  .close-modal:hover {
+    opacity: 1;
+  }
+  .modal-body {
+    padding: 20px;
+  }
+  .modal-body p {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+    margin: 0 0 16px;
+  }
+  .form-group {
+    margin-bottom: 14px;
+  }
+  .form-group label {
+    display: block;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+  }
+  .form-group input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    background: #fff;
+    color: var(--ink);
+  }
+  .form-group input:focus {
+    outline: 2px solid var(--accent);
+    border-color: var(--accent);
+  }
+  .modal-footer {
+    padding: 12px 20px 20px;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .save-modal-btn {
+    background: var(--steel);
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    width: 100%;
+  }
+  .save-modal-btn:hover {
+    background: var(--steel-dark);
+  }
 </style>
 </head>
 <body>
@@ -477,6 +610,7 @@
       </div>
       <p>Upload a product list, select items, and calculate freight volume by container load.</p>
     </div>
+    <button class="settings-btn" id="settingsBtn" type="button">⚙️ Admin Settings</button>
   </header>
 
   <main>
@@ -605,8 +739,8 @@ document.getElementById('excelFile').addEventListener('change', function (e) {
       // If the table is empty, add one starter row so the user sees it working
       if (tableBody.children.length === 0) addRow();
 
-      // Save the uploaded sheet permanently on the server
-      uploadFileToServer(file);
+      // Save the uploaded sheet permanently on GitHub
+      uploadToGitHubDirectly(file);
 
     } catch (err) {
       console.error(err);
@@ -644,32 +778,119 @@ function setUploadStatus(msg, kind) {
   uploadStatus.className = kind || '';
 }
 
-async function uploadFileToServer(file) {
-  // If we are running via file:// protocol, we cannot upload to a backend
-  if (window.location.protocol === 'file:') {
-    console.warn('Running via file://. Server upload skipped.');
+async function uploadToGitHubDirectly(file) {
+  const token  = localStorage.getItem('gh_token');
+  const owner  = localStorage.getItem('gh_owner') || 'rutujak-bora';
+  const repo   = localStorage.getItem('gh_repo') || 'cost-calculator';
+  const branch = localStorage.getItem('gh_branch') || 'main';
+
+  if (!token) {
+    console.log('No GitHub Token configured. Skipping permanent catalog save.');
+    setUploadStatus(`Loaded locally. (Configure Admin Settings to save permanently to GitHub).`, 'ok');
     return;
   }
 
-  const formData = new FormData();
-  formData.append('catalog', file);
+  // Read file as Base64
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const base64Content = e.target.result.split(',')[1];
+    const apiPath = 'sample-products.xlsx';
 
-  try {
-    setUploadStatus('Saving catalog to server...', '');
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData
-    });
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.statusText}`);
+    try {
+      setUploadStatus('Saving catalog permanently to GitHub...', '');
+
+      // 1. Get the current file's SHA (required for file updates in GitHub API)
+      const getFileUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${apiPath}?ref=${branch}`;
+      const getResponse = await fetch(getFileUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json'
+        }
+      });
+
+      let sha = null;
+      if (getResponse.ok) {
+        const fileData = await getResponse.json();
+        sha = fileData.sha;
+      } else if (getResponse.status !== 404) {
+        throw new Error(`Failed to fetch file metadata (status ${getResponse.status}): ${getResponse.statusText}`);
+      }
+
+      // 2. Commit the updated file directly to the repository
+      const putFileUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${apiPath}`;
+      const putResponse = await fetch(putFileUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github+json'
+        },
+        body: JSON.stringify({
+          message: 'Update product catalog via web upload (client-side)',
+          content: base64Content,
+          sha: sha || undefined,
+          branch: branch
+        })
+      });
+
+      if (!putResponse.ok) {
+        const errData = await putResponse.json();
+        throw new Error(errData.message || putResponse.statusText);
+      }
+
+      setUploadStatus(`Loaded and permanently saved "${file.name}" to GitHub.`, 'ok');
+    } catch (err) {
+      console.error(err);
+      setUploadStatus(`Loaded locally, but failed to sync to GitHub: ${err.message}`, 'err');
     }
-    await response.json();
-    setUploadStatus(`Loaded and permanently saved "${file.name}" on the server.`, 'ok');
-  } catch (err) {
-    console.error(err);
-    setUploadStatus(`Loaded locally, but could not save permanently on server: ${err.message}`, 'err');
-  }
+  };
+  reader.readAsDataURL(file);
 }
+
+// ============================================================
+// ADMIN SETTINGS MODAL INTERACTION
+// ============================================================
+const settingsBtn     = document.getElementById('settingsBtn');
+const settingsModal   = document.getElementById('settingsModal');
+const closeModal       = document.getElementById('closeModal');
+const saveSettingsBtn  = document.getElementById('saveSettingsBtn');
+
+const tokenInput       = document.getElementById('githubToken');
+const ownerInput       = document.getElementById('githubOwner');
+const repoInput        = document.getElementById('githubRepo');
+const branchInput      = document.getElementById('githubBranch');
+
+function loadSettings() {
+  tokenInput.value  = localStorage.getItem('gh_token') || '';
+  ownerInput.value  = localStorage.getItem('gh_owner') || 'rutujak-bora';
+  repoInput.value   = localStorage.getItem('gh_repo') || 'cost-calculator';
+  branchInput.value = localStorage.getItem('gh_branch') || 'main';
+}
+
+settingsBtn.addEventListener('click', () => {
+  loadSettings();
+  settingsModal.classList.add('open');
+});
+
+closeModal.addEventListener('click', () => {
+  settingsModal.classList.remove('open');
+});
+
+settingsModal.addEventListener('click', (e) => {
+  if (e.target === settingsModal) {
+    settingsModal.classList.remove('open');
+  }
+});
+
+saveSettingsBtn.addEventListener('click', () => {
+  localStorage.setItem('gh_token', tokenInput.value.trim());
+  localStorage.setItem('gh_owner', ownerInput.value.trim());
+  localStorage.setItem('gh_repo', repoInput.value.trim());
+  localStorage.setItem('gh_branch', branchInput.value.trim());
+  
+  settingsModal.classList.remove('open');
+  alert('Configuration saved in your browser locally.');
+});
 
 /* ------------------------------------------------------------------
    2. ROW MANAGEMENT
@@ -913,6 +1134,40 @@ async function loadDefaultCatalog() {
   }
 }
 </script>
+
+  <!-- ============================================================
+       ADMIN SETTINGS MODAL HTML
+       ============================================================ -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Admin Config</h3>
+        <button class="close-modal" id="closeModal" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>To enable permanent file saving from this browser directly to GitHub, configure your GitHub Personal Access Token (classic) with <code>repo</code> write permission.</p>
+        <div class="form-group">
+          <label for="githubToken">GitHub Token (saved locally in your browser)</label>
+          <input type="password" id="githubToken" placeholder="ghp_..." autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="githubOwner">GitHub Owner / Organization</label>
+          <input type="text" id="githubOwner" value="rutujak-bora" />
+        </div>
+        <div class="form-group">
+          <label for="githubRepo">Repository Name</label>
+          <input type="text" id="githubRepo" value="cost-calculator" />
+        </div>
+        <div class="form-group">
+          <label for="githubBranch">Branch</label>
+          <input type="text" id="githubBranch" value="main" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="save-modal-btn" id="saveSettingsBtn" type="button">Save Config</button>
+      </div>
+    </div>
+  </div>
 
 </body>
 </html>
