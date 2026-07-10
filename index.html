@@ -599,6 +599,84 @@
   .save-modal-btn:hover {
     background: var(--steel-dark);
   }
+
+  /* ============================================================
+     MANIFEST ACTIONS TOOLBAR
+     ============================================================ */
+  .manifest-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .bulk-add-wrapper {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .bulk-add-wrapper input {
+    width: 54px;
+    border: none;
+    padding: 8px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    text-align: center;
+    outline: none;
+    color: var(--ink);
+  }
+  .bulk-add-wrapper button {
+    border: none;
+    border-left: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--steel-dark);
+    padding: 8px 12px;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .bulk-add-wrapper button:hover {
+    background: var(--line-soft);
+  }
+  .secondary-btn {
+    background: var(--paper);
+    color: var(--steel-dark);
+    border: 1px solid var(--line);
+    font-weight: 600;
+    font-size: 13px;
+    padding: 10px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+  }
+  .secondary-btn:hover {
+    background: var(--line-soft);
+    border-color: var(--muted);
+  }
+  .danger-btn-soft {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border: 1px solid transparent;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 10px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+  }
+  .danger-btn-soft:hover {
+    background: var(--danger);
+    color: #fff;
+  }
 </style>
 </head>
 <body>
@@ -644,7 +722,17 @@
     <section class="table-wrap">
       <div class="table-head-bar">
         <h2>2. Freight Volume Manifest</h2>
-        <button class="add-row-btn" id="addRowBtn" type="button">+ Add Row</button>
+        <div class="manifest-actions">
+          <button class="add-row-btn" id="addRowBtn" type="button">+ Add Row</button>
+          
+          <div class="bulk-add-wrapper">
+            <input type="number" id="bulkAddCount" min="1" max="100" value="5" />
+            <button id="bulkAddBtn" type="button">Add Rows</button>
+          </div>
+          
+          <button class="secondary-btn" id="bulkPasteBtn" type="button">📋 Bulk Paste</button>
+          <button class="danger-btn-soft" id="clearAllBtn" type="button">🗑️ Clear All</button>
+        </div>
       </div>
 
       <table id="calcTable">
@@ -895,28 +983,67 @@ saveSettingsBtn.addEventListener('click', () => {
 
 /* ------------------------------------------------------------------
    2. ROW MANAGEMENT
-   ------------------------------------------------------------------ */
+   --------------------------------------------// Toolbar event listeners
 document.getElementById('addRowBtn').addEventListener('click', () => addRow());
+document.getElementById('bulkAddBtn').addEventListener('click', () => {
+  const count = parseInt(document.getElementById('bulkAddCount').value) || 5;
+  addMultipleRows(count);
+});
+document.getElementById('clearAllBtn').addEventListener('click', () => clearAllRows());
 
-function addRow() {
+// Bulk Paste Modal event listeners
+const bulkPasteModal    = document.getElementById('bulkPasteModal');
+const closePasteModal   = document.getElementById('closePasteModal');
+const bulkPasteTextarea = document.getElementById('bulkPasteTextarea');
+const importPastedBtn   = document.getElementById('importPastedBtn');
+
+document.getElementById('bulkPasteBtn').addEventListener('click', () => {
+  bulkPasteTextarea.value = '';
+  bulkPasteModal.classList.add('open');
+});
+
+closePasteModal.addEventListener('click', () => {
+  bulkPasteModal.classList.remove('open');
+});
+
+bulkPasteModal.addEventListener('click', (e) => {
+  if (e.target === bulkPasteModal) {
+    bulkPasteModal.classList.remove('open');
+  }
+});
+
+importPastedBtn.addEventListener('click', () => {
+  const text = bulkPasteTextarea.value;
+  parseBulkPaste(text);
+  bulkPasteModal.classList.remove('open');
+});
+
+function addRow(initialName = '', initialQty = 0) {
   rowCounter += 1;
   const id = rowCounter;
 
   const tr = document.createElement('tr');
   tr.dataset.id = id;
+
+  // Find product in catalog if initialName is provided
+  let exact = null;
+  if (initialName) {
+    exact = products.find(p => p.name.toLowerCase() === initialName.trim().toLowerCase());
+  }
+
   tr.innerHTML = `
     <td class="row-index" data-label="#">${id}</td>
     <td data-label="Product">
       <div class="product-search">
-        <input class="product-input" type="text" autocomplete="off" placeholder="Search product…" />
+        <input class="product-input" type="text" autocomplete="off" placeholder="Search product…" value="${initialName.replace(/"/g, '&quot;')}" />
         <div class="product-dropdown"></div>
       </div>
     </td>
-    <td data-label="Length (cm)"><input class="dim-input" data-dim="l" type="number" min="0" step="any" /></td>
-    <td data-label="Width (cm)"><input class="dim-input" data-dim="w" type="number" min="0" step="any" /></td>
-    <td data-label="Height (cm)"><input class="dim-input" data-dim="h" type="number" min="0" step="any" /></td>
+    <td data-label="Length (cm)"><input class="dim-input" data-dim="l" type="number" min="0" step="any" value="${exact ? exact.l : ''}" /></td>
+    <td data-label="Width (cm)"><input class="dim-input" data-dim="w" type="number" min="0" step="any" value="${exact ? exact.w : ''}" /></td>
+    <td data-label="Height (cm)"><input class="dim-input" data-dim="h" type="number" min="0" step="any" value="${exact ? exact.h : ''}" /></td>
     <td data-label="CBM (m³)"><span class="cbm-value">0.0000</span></td>
-    <td data-label="Quantity"><input class="qty-input" type="number" min="0" step="1" value="0" /></td>
+    <td data-label="Quantity"><input class="qty-input" type="number" min="0" step="1" value="${initialQty}" /></td>
     <td data-label="Freight Volume (m³)"><span class="freight-value">0.0000</span></td>
     <td data-label=""><button class="remove-btn" title="Remove row">&times;</button></td>
   `;
@@ -1015,6 +1142,56 @@ function addRow() {
     refreshEmptyState();
     recalcGrandTotal();
   });
+
+  // Calculate immediately if prefilled data was provided
+  if (initialName || initialQty) {
+    recalcRow(tr);
+  }
+}
+
+function addMultipleRows(count) {
+  for (let i = 0; i < count; i++) {
+    addRow();
+  }
+}
+
+function clearAllRows() {
+  if (confirm('Are you sure you want to clear all rows in the manifest?')) {
+    tableBody.innerHTML = '';
+    refreshEmptyState();
+    recalcGrandTotal();
+  }
+}
+
+function parseBulkPaste(text) {
+  const lines = text.split('\n');
+  let addedCount = 0;
+
+  lines.forEach(line => {
+    if (!line.trim()) return;
+
+    let parts = line.split('\t');
+    if (parts.length < 2) {
+      const match = line.trim().match(/^(.*?)\s+(\d+)$/);
+      if (match) {
+        parts = [match[1], match[2]];
+      } else {
+        parts = [line.trim(), '1'];
+      }
+    }
+
+    const prodName = parts[0].trim();
+    const qty = parseInt(parts[1]) || 1;
+
+    if (!prodName) return;
+
+    addRow(prodName, qty);
+    addedCount++;
+  });
+
+  if (addedCount > 0) {
+    alert(`Successfully imported ${addedCount} products.`);
+  }
 }
 
 function refreshEmptyState() {
@@ -1135,6 +1312,31 @@ async function loadDefaultCatalog() {
   }
 }
 </script>
+
+  <!-- ============================================================
+       BULK PASTE MODAL HTML
+       ============================================================ -->
+  <div class="modal-overlay" id="bulkPasteModal">
+    <div class="modal-card" style="max-width: 560px;">
+      <div class="modal-header">
+        <h3>📋 Bulk Import from Excel / Sheets</h3>
+        <button class="close-modal" id="closePasteModal" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Copy columns from Excel or Google Sheets (e.g. one column of product names and one of quantities) and paste them here:</p>
+        <div class="form-group">
+          <label for="bulkPasteTextarea">Paste data here (Product [Tab] Quantity)</label>
+          <textarea id="bulkPasteTextarea" rows="8" placeholder="Product A	10&#10;Product B	5" style="width:100%; font-family:var(--font-mono); font-size:13px; padding:10px; border:1px solid var(--line); border-radius:4px; outline:none; resize:vertical; background:#fff; color:var(--ink);"></textarea>
+        </div>
+        <p class="sample-note" style="margin-top: 10px;">
+          If the names match your Excel catalog exactly, their Length, Width, and Height dimensions will populate automatically.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="save-modal-btn" id="importPastedBtn" type="button" style="background:var(--accent); color:var(--ink);">Import Data</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ============================================================
        ADMIN SETTINGS MODAL HTML
