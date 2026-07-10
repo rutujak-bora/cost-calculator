@@ -333,8 +333,6 @@
   input.dim-input{
     width: 74px;
     font-family: var(--font-mono);
-    background: var(--paper);
-    color: var(--muted);
   }
   input.qty-input{
     width: 84px;
@@ -662,9 +660,9 @@ function addRow() {
         <div class="product-dropdown"></div>
       </div>
     </td>
-    <td data-label="Length (cm)"><input class="dim-input" data-dim="l" type="number" readonly /></td>
-    <td data-label="Width (cm)"><input class="dim-input" data-dim="w" type="number" readonly /></td>
-    <td data-label="Height (cm)"><input class="dim-input" data-dim="h" type="number" readonly /></td>
+    <td data-label="Length (cm)"><input class="dim-input" data-dim="l" type="number" min="0" step="any" /></td>
+    <td data-label="Width (cm)"><input class="dim-input" data-dim="w" type="number" min="0" step="any" /></td>
+    <td data-label="Height (cm)"><input class="dim-input" data-dim="h" type="number" min="0" step="any" /></td>
     <td data-label="CBM (m³)"><span class="cbm-value">0.0000</span></td>
     <td data-label="Quantity"><input class="qty-input" type="number" min="0" step="1" value="0" /></td>
     <td data-label="Freight Volume (m³)"><span class="freight-value">0.0000</span></td>
@@ -756,6 +754,9 @@ function addRow() {
   productInput.addEventListener('blur', closeDropdown);
 
   qtyInput.addEventListener('input', () => recalcRow(tr));
+  tr.querySelectorAll('.dim-input').forEach(input => {
+    input.addEventListener('input', () => recalcRow(tr));
+  });
 
   removeBtn.addEventListener('click', () => {
     tr.remove();
@@ -847,6 +848,40 @@ function recalcGrandTotal() {
 addRow();
 addRow();
 refreshEmptyState();
+loadDefaultCatalog();
+
+async function loadDefaultCatalog() {
+  if (window.location.protocol === 'file:') {
+    setUploadStatus('Running locally via file://. Please upload an Excel file manually to search products.', 'err');
+    return;
+  }
+  try {
+    setUploadStatus('Loading default product catalog...', '');
+    const response = await fetch('sample-products.xlsx');
+    if (!response.ok) {
+      throw new Error(`Failed to fetch: ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const data = new Uint8Array(arrayBuffer);
+    const workbook = XLSX.read(data, { type: 'array' });
+
+    const firstSheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[firstSheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    const parsed = rows.map(mapRowToProduct).filter(p => p && p.name);
+
+    if (parsed.length > 0) {
+      products = parsed;
+      setUploadStatus(`Default catalog loaded: ${products.length} products.`, 'ok');
+    } else {
+      setUploadStatus('Default catalog is empty or invalid.', 'err');
+    }
+  } catch (err) {
+    console.error(err);
+    setUploadStatus('Could not load default catalog. You can still upload manually.', 'err');
+  }
+}
 </script>
 
 </body>
