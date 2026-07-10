@@ -605,6 +605,9 @@ document.getElementById('excelFile').addEventListener('change', function (e) {
       // If the table is empty, add one starter row so the user sees it working
       if (tableBody.children.length === 0) addRow();
 
+      // Save the uploaded sheet permanently on the server
+      uploadFileToServer(file);
+
     } catch (err) {
       console.error(err);
       setUploadStatus('Could not read this file. Please upload a valid .xlsx or .xls file.', 'err');
@@ -639,6 +642,33 @@ function mapRowToProduct(row) {
 function setUploadStatus(msg, kind) {
   uploadStatus.textContent = msg;
   uploadStatus.className = kind || '';
+}
+
+async function uploadFileToServer(file) {
+  // If we are running via file:// protocol, we cannot upload to a backend
+  if (window.location.protocol === 'file:') {
+    console.warn('Running via file://. Server upload skipped.');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('catalog', file);
+
+  try {
+    setUploadStatus('Saving catalog to server...', '');
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData
+    });
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.statusText}`);
+    }
+    await response.json();
+    setUploadStatus(`Loaded and permanently saved "${file.name}" on the server.`, 'ok');
+  } catch (err) {
+    console.error(err);
+    setUploadStatus(`Loaded locally, but could not save permanently on server: ${err.message}`, 'err');
+  }
 }
 
 /* ------------------------------------------------------------------
