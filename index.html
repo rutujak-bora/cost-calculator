@@ -777,6 +777,65 @@
 
   </main>
 
+  <!-- ============================================================
+       BULK PASTE MODAL HTML
+       ============================================================ -->
+  <div class="modal-overlay" id="bulkPasteModal">
+    <div class="modal-card" style="max-width: 560px;">
+      <div class="modal-header">
+        <h3>📋 Bulk Import from Excel / Sheets</h3>
+        <button class="close-modal" id="closePasteModal" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Copy columns from Excel or Google Sheets (e.g. one column of product names and one of quantities) and paste them here:</p>
+        <div class="form-group">
+          <label for="bulkPasteTextarea">Paste data here (Product [Tab] Quantity)</label>
+          <textarea id="bulkPasteTextarea" rows="8" placeholder="Product A	10&#10;Product B	5" style="width:100%; font-family:var(--font-mono); font-size:13px; padding:10px; border:1px solid var(--line); border-radius:4px; outline:none; resize:vertical; background:#fff; color:var(--ink);"></textarea>
+        </div>
+        <p class="sample-note" style="margin-top: 10px;">
+          If the names match your Excel catalog exactly, their Length, Width, and Height dimensions will populate automatically.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="save-modal-btn" id="importPastedBtn" type="button" style="background:var(--accent); color:var(--ink);">Import Data</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       ADMIN SETTINGS MODAL HTML
+       ============================================================ -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Admin Config</h3>
+        <button class="close-modal" id="closeModal" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>To enable permanent file saving from this browser directly to GitHub, configure your GitHub Personal Access Token (classic) with <code>repo</code> write permission.</p>
+        <div class="form-group">
+          <label for="githubToken">GitHub Token (saved locally in your browser)</label>
+          <input type="password" id="githubToken" placeholder="ghp_..." autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="githubOwner">GitHub Owner / Organization</label>
+          <input type="text" id="githubOwner" value="rutujak-bora" />
+        </div>
+        <div class="form-group">
+          <label for="githubRepo">Repository Name</label>
+          <input type="text" id="githubRepo" value="cost-calculator" />
+        </div>
+        <div class="form-group">
+          <label for="githubBranch">Branch</label>
+          <input type="text" id="githubBranch" value="main" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="save-modal-btn" id="saveSettingsBtn" type="button">Save Config</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 /* ==================================================================
    FREIGHT COST CALCULATOR — application logic
@@ -1312,65 +1371,6 @@ async function loadDefaultCatalog() {
   }
 }
 </script>
-
-  <!-- ============================================================
-       BULK PASTE MODAL HTML
-       ============================================================ -->
-  <div class="modal-overlay" id="bulkPasteModal">
-    <div class="modal-card" style="max-width: 560px;">
-      <div class="modal-header">
-        <h3>📋 Bulk Import from Excel / Sheets</h3>
-        <button class="close-modal" id="closePasteModal" type="button">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p>Copy columns from Excel or Google Sheets (e.g. one column of product names and one of quantities) and paste them here:</p>
-        <div class="form-group">
-          <label for="bulkPasteTextarea">Paste data here (Product [Tab] Quantity)</label>
-          <textarea id="bulkPasteTextarea" rows="8" placeholder="Product A	10&#10;Product B	5" style="width:100%; font-family:var(--font-mono); font-size:13px; padding:10px; border:1px solid var(--line); border-radius:4px; outline:none; resize:vertical; background:#fff; color:var(--ink);"></textarea>
-        </div>
-        <p class="sample-note" style="margin-top: 10px;">
-          If the names match your Excel catalog exactly, their Length, Width, and Height dimensions will populate automatically.
-        </p>
-      </div>
-      <div class="modal-footer">
-        <button class="save-modal-btn" id="importPastedBtn" type="button" style="background:var(--accent); color:var(--ink);">Import Data</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================
-       ADMIN SETTINGS MODAL HTML
-       ============================================================ -->
-  <div class="modal-overlay" id="settingsModal">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3>Admin Config</h3>
-        <button class="close-modal" id="closeModal" type="button">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p>To enable permanent file saving from this browser directly to GitHub, configure your GitHub Personal Access Token (classic) with <code>repo</code> write permission.</p>
-        <div class="form-group">
-          <label for="githubToken">GitHub Token (saved locally in your browser)</label>
-          <input type="password" id="githubToken" placeholder="ghp_..." autocomplete="off" />
-        </div>
-        <div class="form-group">
-          <label for="githubOwner">GitHub Owner / Organization</label>
-          <input type="text" id="githubOwner" value="rutujak-bora" />
-        </div>
-        <div class="form-group">
-          <label for="githubRepo">Repository Name</label>
-          <input type="text" id="githubRepo" value="cost-calculator" />
-        </div>
-        <div class="form-group">
-          <label for="githubBranch">Branch</label>
-          <input type="text" id="githubBranch" value="main" />
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="save-modal-btn" id="saveSettingsBtn" type="button">Save Config</button>
-      </div>
-    </div>
-  </div>
 
 </body>
 </html>
