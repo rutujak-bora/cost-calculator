@@ -1,0 +1,9 @@
+{
+  "name": "cost-calculator",
+  "version": "1.0.0",
+  "description": "Freight Cost Calculator",
+  "scripts": {
+    "build": "echo 'Building static site...'",
+    "start": "echo 'Running static site...'"
+  }
+}
