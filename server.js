@@ -1,13 +1,37 @@
+require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
+const mongoose = require('mongoose');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://cost-calculator:Bora%4012345@cost-calculator.ubb3kxd.mongodb.net/cost_calculator?retryWrites=true&w=majority";
 
-// Setup upload directory and storage for multer to overwrite sample-products.xlsx
+// Connect to MongoDB Atlas
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('Successfully connected to MongoDB Atlas!'))
+  .catch(err => console.error('MongoDB Atlas connection error:', err));
+
+// Mongoose schema for Catalogs
+const catalogSchema = new mongoose.Schema({
+  filename: String,
+  uploadedAt: { type: Date, default: Date.now },
+  productCount: Number,
+  products: [{
+    name: String,
+    l: Number,
+    w: Number,
+    h: Number
+  }],
+  active: { type: Boolean, default: true }
+});
+
+const Catalog = mongoose.model('Catalog', catalogSchema);
+
+// Setup upload directory and storage for multer to temporary files
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, __dirname);
@@ -51,7 +75,7 @@ function mapRowToProduct(row) {
   };
 }
 
-// Parses sample-products.xlsx and returns products list
+// Parses local file as fallback
 function getProductsFromExcel() {
   const filePath = path.join(__dirname, 'sample-products.xlsx');
   if (!fs.existsSync(filePath)) {
@@ -65,7 +89,7 @@ function getProductsFromExcel() {
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
     return rows.map(mapRowToProduct).filter(p => p && p.name);
   } catch (err) {
-    console.error('Error reading excel file:', err);
+    console.error('Error reading excel file fallback:', err);
     return [];
   }
 }
@@ -73,34 +97,58 @@ function getProductsFromExcel() {
 // Enable JSON request body parsing
 app.use(express.json());
 
-// API: Get products list
-app.get('/api/products', (req, res) => {
-  const products = getProductsFromExcel();
-  res.json(products);
+// API: Get products list (Active catalog from database, or fallback to local disk)
+app.get('/api/products', async (req, res) => {
+  try {
+    const activeCatalog = await Catalog.findOne({ active: true });
+    if (activeCatalog && activeCatalog.products && activeCatalog.products.length > 0) {
+      return res.json(activeCatalog.products);
+    }
+    // Fallback to local xlsx file if no database records exist
+    const fallbackProducts = getProductsFromExcel();
+    res.json(fallbackProducts);
+  } catch (err) {
+    console.error('Error fetching products:', err);
+    res.status(500).json({ error: 'Failed to fetch products from database.' });
+  }
 });
 
-// API: Handle file upload
-app.post('/api/upload', upload.single('catalog'), (req, res) => {
+// API: Handle file upload and save to MongoDB
+app.post('/api/upload', upload.single('catalog'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded.' });
   }
 
-  // Validate the uploaded file has valid product rows
-  const products = getProductsFromExcel();
-  if (products.length === 0) {
-    // If invalid, delete the file and return error
-    try {
-      fs.unlinkSync(req.file.path);
-    } catch (e) {}
-    return res.status(400).json({ error: 'No valid products found in the sheet. Make sure headers match.' });
-  }
+  try {
+    // Parse uploaded file locally first to extract products
+    const products = getProductsFromExcel();
+    if (products.length === 0) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+      return res.status(400).json({ error: 'No valid products found in the sheet. Make sure headers match.' });
+    }
 
-  console.log(`Saved new catalog file. Loaded ${products.length} products.`);
-  res.json({ 
-    status: 'success', 
-    message: `Catalog uploaded and saved. Loaded ${products.length} products.`,
-    count: products.length
-  });
+    // Set all previous catalogs to inactive
+    await Catalog.updateMany({}, { active: false });
+
+    // Save new catalog to MongoDB Atlas
+    const newCatalog = new Catalog({
+      filename: req.file.originalname,
+      productCount: products.length,
+      products: products,
+      active: true
+    });
+    await newCatalog.save();
+
+    console.log(`Saved new catalog to database: "${req.file.originalname}". Loaded ${products.length} products.`);
+    res.json({ 
+      status: 'success', 
+      message: `Catalog uploaded and saved permanently to database. Loaded ${products.length} products.`,
+      count: products.length
+    });
+  } catch (err) {
+    console.error('Error saving uploaded file:', err);
+    res.status(500).json({ error: 'Server error saving catalog to database.' });
+  }
 });
 
 // Serve static files from the current directory
