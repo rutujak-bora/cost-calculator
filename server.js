@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -7,6 +8,7 @@ const XLSX = require('xlsx');
 const mongoose = require('mongoose');
 
 const app = express();
+app.use(cors());
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://cost-calculator:Bora%4012345@cost-calculator.ubb3kxd.mongodb.net/cost_calculator?retryWrites=true&w=majority";
 
