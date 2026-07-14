@@ -4,35 +4,34 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Freight Cost Calculator</title>
-<meta name="description" content="Upload a product catalog, select items, and calculate freight volume by container load. Supports CBM calculation and manifest generation." />
 <link rel="icon" type="image/png" href="favicon.png" />
 
-<!-- SheetJS: used only for client-side Export (.xlsx download) -->
+<!-- SheetJS: reads .xlsx / .xls files entirely in the browser (no backend needed) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-<!-- Fonts -->
+<!-- Fonts: condensed industrial display face for the "manifest" feel,
+     Inter for UI text, IBM Plex Mono for tabular numbers (ledger look) -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <style>
   /* ============================================================
      DESIGN TOKENS
+     Palette: cool steel/navy ledger + amber "customs stamp" accent
      ============================================================ */
   :root{
-    --ink:        #101820;
-    --steel:      #2C4356;
+    --ink:        #101820;   /* deep navy-black, headers & primary text */
+    --steel:      #2C4356;   /* steel blue, primary brand */
     --steel-dark: #1B2C3A;
-    --paper:      #EEF1EF;
+    --paper:      #EEF1EF;   /* cool paper background */
     --card:       #FFFFFF;
-    --line:       #CBD2CE;
+    --line:       #CBD2CE;   /* hairline rules */
     --line-soft:  #E2E6E3;
-    --accent:     #E8A33D;
+    --accent:     #E8A33D;   /* amber stamp accent */
     --accent-dark:#C7841F;
     --danger:     #B5482A;
     --danger-soft:#F5E3DC;
     --muted:      #5C6B72;
-    --success:    #2E7D4F;
-    --success-soft:#E3F5EB;
 
     --font-display: 'Big Shoulders Display', sans-serif;
     --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -95,34 +94,6 @@
     font-size: 13px;
     color: #B9C2C8;
   }
-  .server-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(46,125,79,0.2);
-    border: 1px solid #2E7D4F;
-    color: #6FCF97;
-    padding: 6px 12px;
-    border-radius: 4px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
-  .server-badge::before {
-    content: '';
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #6FCF97;
-    box-shadow: 0 0 6px #6FCF97;
-    animation: pulse 2s infinite;
-  }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
 
   main{
     max-width: 1180px;
@@ -180,30 +151,20 @@
     transition: background .15s ease;
   }
   .file-btn:hover{ background: var(--steel-dark); }
+  .file-btn input[type=file]{
+    position:absolute;
+    inset:0;
+    opacity:0;
+    cursor:pointer;
+  }
 
   #uploadStatus{
     font-family: var(--font-mono);
     font-size: 13px;
     color: var(--muted);
-    display: flex;
-    align-items: center;
-    gap: 8px;
   }
-  #uploadStatus.ok{ color: var(--success); }
+  #uploadStatus.ok{ color: #2E7D4F; }
   #uploadStatus.err{ color: var(--danger); }
-  #uploadStatus.loading{ color: var(--muted); }
-
-  .spinner {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    border: 2px solid var(--line);
-    border-top-color: var(--steel);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-    flex-shrink: 0;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
 
   .sample-note{
     font-size: 12px;
@@ -234,8 +195,6 @@
     justify-content: space-between;
     padding: 16px 20px;
     border-bottom: 1px solid var(--line);
-    flex-wrap: wrap;
-    gap: 12px;
   }
   .table-head-bar h2{
     font-family: var(--font-display);
@@ -245,14 +204,6 @@
     letter-spacing: 0.5px;
     margin:0;
     color: var(--steel-dark);
-  }
-
-  /* Manifest actions toolbar */
-  .manifest-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
   }
 
   .add-row-btn{
@@ -267,72 +218,8 @@
     display:inline-flex;
     align-items:center;
     gap:6px;
-    transition: background 0.15s ease;
   }
   .add-row-btn:hover{ background: var(--steel-dark); }
-
-  .bulk-add-wrapper {
-    display: inline-flex;
-    align-items: center;
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    overflow: hidden;
-    background: #fff;
-  }
-  .bulk-add-wrapper input {
-    width: 54px;
-    border: none;
-    padding: 8px;
-    font-family: var(--font-mono);
-    font-size: 13px;
-    text-align: center;
-    outline: none;
-    color: var(--ink);
-  }
-  .bulk-add-wrapper button {
-    border: none;
-    border-left: 1px solid var(--line);
-    background: var(--paper);
-    color: var(--steel-dark);
-    padding: 8px 12px;
-    font-weight: 600;
-    font-size: 12px;
-    cursor: pointer;
-    transition: background 0.15s ease;
-  }
-  .bulk-add-wrapper button:hover { background: var(--line-soft); }
-
-  .secondary-btn {
-    background: var(--paper);
-    color: var(--steel-dark);
-    border: 1px solid var(--line);
-    font-weight: 600;
-    font-size: 13px;
-    padding: 10px 16px;
-    border-radius: 4px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.15s ease;
-  }
-  .secondary-btn:hover { background: var(--line-soft); border-color: var(--muted); }
-
-  .danger-btn-soft {
-    background: var(--danger-soft);
-    color: var(--danger);
-    border: 1px solid transparent;
-    font-weight: 600;
-    font-size: 13px;
-    padding: 10px 16px;
-    border-radius: 4px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.15s ease;
-  }
-  .danger-btn-soft:hover { background: var(--danger); color: #fff; }
 
   .download-bar{
     padding: 16px 20px 20px;
@@ -356,10 +243,12 @@
     width: 100%;
     max-width: 360px;
     justify-content: center;
-    transition: background 0.15s ease;
   }
   .download-btn:hover{ background: var(--accent-dark); }
-  .download-btn:disabled{ opacity: 0.45; cursor: not-allowed; }
+  .download-btn:disabled{
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
 
   table{
     width:100%;
@@ -401,10 +290,11 @@
     border-radius: 4px;
     background: #fff;
     color: var(--ink);
-    transition: border-color 0.15s ease;
   }
   input.product-input{ min-width: 170px; }
 
+  /* Custom searchable dropdown (replaces native <datalist>, which iOS
+     Safari ignores entirely and Android support is inconsistent) */
   .product-search{ position: relative; }
   .product-dropdown{
     display:none;
@@ -441,8 +331,14 @@
     font-size: 13px;
     color: var(--muted);
   }
-  input.dim-input{ width: 74px; font-family: var(--font-mono); }
-  input.qty-input{ width: 84px; font-family: var(--font-mono); }
+  input.dim-input{
+    width: 74px;
+    font-family: var(--font-mono);
+  }
+  input.qty-input{
+    width: 84px;
+    font-family: var(--font-mono);
+  }
   input.dim-input:focus, input.qty-input:focus, input.product-input:focus{
     outline: 2px solid var(--accent);
     outline-offset: 1px;
@@ -467,12 +363,11 @@
     font-size: 16px;
     line-height: 1;
     font-weight: 700;
-    transition: all 0.15s ease;
   }
   .remove-btn:hover{ background: var(--danger); color:#fff; }
 
   /* ============================================================
-     GRAND TOTAL — "customs stamp"
+     GRAND TOTAL — "customs stamp" signature element
      ============================================================ */
   .total-bar{
     display:flex;
@@ -531,7 +426,7 @@
   }
 
   /* ============================================================
-     RESPONSIVE
+     RESPONSIVE — collapse table into stacked "manifest cards"
      ============================================================ */
   @media (max-width: 760px){
     header.topbar{ padding: 18px 18px; }
@@ -573,8 +468,26 @@
   }
 
   /* ============================================================
-     MODALS
+     ADMIN SETTINGS MODAL & BUTTON
      ============================================================ */
+  .settings-btn {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.2s ease;
+  }
+  .settings-btn:hover {
+    background: var(--accent);
+    color: var(--ink);
+  }
+
   .modal-overlay {
     display: none;
     position: fixed;
@@ -586,7 +499,9 @@
     justify-content: center;
     padding: 20px;
   }
-  .modal-overlay.open { display: flex; }
+  .modal-overlay.open {
+    display: flex;
+  }
   .modal-card {
     background: var(--card);
     border: 1px solid var(--line);
@@ -626,15 +541,21 @@
     opacity: 0.7;
     transition: opacity 0.15s ease;
   }
-  .close-modal:hover { opacity: 1; }
-  .modal-body { padding: 20px; }
+  .close-modal:hover {
+    opacity: 1;
+  }
+  .modal-body {
+    padding: 20px;
+  }
   .modal-body p {
     font-size: 13px;
     color: var(--muted);
     line-height: 1.5;
     margin: 0 0 16px;
   }
-  .form-group { margin-bottom: 14px; }
+  .form-group {
+    margin-bottom: 14px;
+  }
   .form-group label {
     display: block;
     font-size: 10px;
@@ -643,6 +564,20 @@
     color: var(--muted);
     margin-bottom: 6px;
     letter-spacing: 0.5px;
+  }
+  .form-group input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    background: #fff;
+    color: var(--ink);
+  }
+  .form-group input:focus {
+    outline: 2px solid var(--accent);
+    border-color: var(--accent);
   }
   .modal-footer {
     padding: 12px 20px 20px;
@@ -661,7 +596,9 @@
     transition: background 0.15s ease;
     width: 100%;
   }
-  .save-modal-btn:hover { background: var(--steel-dark); }
+  .save-modal-btn:hover {
+    background: var(--steel-dark);
+  }
 </style>
 </head>
 <body>
@@ -674,44 +611,40 @@
       </div>
       <p>Upload a product list, select items, and calculate freight volume by container load.</p>
     </div>
-    <div class="server-badge" id="serverBadge">AWS Server</div>
+    <button class="settings-btn" id="settingsBtn" type="button">⚙️ Admin Settings</button>
   </header>
 
   <main>
 
-    <!-- Panel 1: Excel upload -->
+    <!-- ============================================================
+         PANEL 1: Excel upload
+         ============================================================ -->
     <section class="panel">
       <h2>1. Load Product Dimensions</h2>
-      <p class="sub">Upload an Excel file (.xlsx or .xls) — it will be saved permanently on the server. All users will see the updated catalog automatically.</p>
+      <p class="sub">Upload an Excel file (.xlsx or .xls) containing your product catalog.</p>
 
       <div class="upload-row">
-        <label class="file-btn" id="uploadLabel">
-          📂 Upload Catalog
-          <input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none;" />
+        <label class="file-btn">
+          Choose Excel File
+          <input type="file" id="excelFile" accept=".xlsx,.xls" style="display: none;" />
         </label>
-        <span id="uploadStatus" class="loading">Loading catalog from server…</span>
+        <span id="uploadStatus">No file uploaded yet.</span>
       </div>
 
       <p class="sample-note">
-        Expected columns (any order, loosely matched):
+        Expected columns (any order, header text is matched loosely):
         <code>Product Name</code>, <code>Length (L)</code>, <code>Width (W)</code>, <code>Height (H)</code>.
-        Dimensions in centimetres.
+        Dimensions should be in centimetres.
       </p>
     </section>
 
-    <!-- Panel 2: Manifest table -->
+    <!-- ============================================================
+         PANEL 2: Calculation table
+         ============================================================ -->
     <section class="table-wrap">
       <div class="table-head-bar">
         <h2>2. Freight Volume Manifest</h2>
-        <div class="manifest-actions">
-          <button class="add-row-btn" id="addRowBtn" type="button">+ Add Row</button>
-          <div class="bulk-add-wrapper">
-            <input type="number" id="bulkAddCount" min="1" max="100" value="5" />
-            <button id="bulkAddBtn" type="button">Add Rows</button>
-          </div>
-          <button class="secondary-btn" id="bulkPasteBtn" type="button">📋 Bulk Paste</button>
-          <button class="danger-btn-soft" id="clearAllBtn" type="button">🗑️ Clear All</button>
-        </div>
+        <button class="add-row-btn" id="addRowBtn" type="button">+ Add Row</button>
       </div>
 
       <table id="calcTable">
@@ -747,188 +680,227 @@
 
       <div class="download-bar">
         <button class="download-btn" id="downloadBtn" type="button">
-          ⬇ Download Freight Calculation (.xlsx)
+          Download Freight Calculation (.xlsx)
         </button>
       </div>
     </section>
 
-    <footer>Freight Cost Calculator — powered by AWS · files saved permanently on server.</footer>
+    <footer>Freight Cost Calculator — all calculations run locally in your browser.</footer>
 
   </main>
 
-  <!-- Bulk Paste Modal -->
-  <div class="modal-overlay" id="bulkPasteModal">
-    <div class="modal-card" style="max-width: 560px;">
-      <div class="modal-header">
-        <h3>📋 Bulk Import</h3>
-        <button class="close-modal" id="closePasteModal" type="button">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p>Copy two columns from Excel or Google Sheets (Product Name &amp; Quantity) and paste below:</p>
-        <div class="form-group">
-          <label for="bulkPasteTextarea">Paste data here (Product [Tab] Quantity per line)</label>
-          <textarea id="bulkPasteTextarea" rows="8"
-            placeholder="Product A&#9;10&#10;Product B&#9;5"
-            style="width:100%; font-family:var(--font-mono); font-size:13px; padding:10px; border:1px solid var(--line); border-radius:4px; outline:none; resize:vertical; background:#fff; color:var(--ink);"></textarea>
-        </div>
-        <p class="sample-note" style="margin-top:8px;">
-          If product names exactly match the loaded catalog, dimensions will auto-populate.
-        </p>
-      </div>
-      <div class="modal-footer">
-        <button class="save-modal-btn" id="importPastedBtn" type="button" style="background:var(--accent); color:var(--ink);">Import Data</button>
-      </div>
-    </div>
-  </div>
-
 <script>
 /* ==================================================================
-   FREIGHT COST CALCULATOR — full-stack mode
-   Products fetched from /api/products (server parses the Excel)
-   Uploads sent to /api/upload (server saves to disk permanently)
+   FREIGHT COST CALCULATOR — application logic
+   ------------------------------------------------------------------
+   - products: array of {name, l, w, h} parsed from the uploaded Excel
+   - rows are rendered dynamically into <tbody id="tableBody">
+   - each row recalculates its own CBM / Freight Volume, and the
+     grand total is recomputed whenever any row changes
    ================================================================== */
 
-let products = [];
-let rowCounter = 0;
+let products = [];      // parsed from Excel: [{ name, l, w, h }, ...]
+let rowCounter = 0;     // unique id generator for rows
 
-const tableBody    = document.getElementById('tableBody');
-const emptyState   = document.getElementById('emptyState');
-const grandTotalEl = document.getElementById('grandTotal');
-const uploadStatus = document.getElementById('uploadStatus');
-
-/* ------------------------------------------------------------------
-   UTILITY: set upload status text + class
-   ------------------------------------------------------------------ */
-function setUploadStatus(msg, kind, showSpinner) {
-  uploadStatus.innerHTML = showSpinner
-    ? `<span class="spinner"></span>${msg}`
-    : msg;
-  uploadStatus.className = kind || '';
-}
+const tableBody   = document.getElementById('tableBody');
+const emptyState  = document.getElementById('emptyState');
+const grandTotalEl= document.getElementById('grandTotal');
+const uploadStatus= document.getElementById('uploadStatus');
 
 /* ------------------------------------------------------------------
-   1. LOAD CATALOG FROM SERVER ON PAGE LOAD
+   1. EXCEL UPLOAD
    ------------------------------------------------------------------ */
-async function loadCatalogFromServer() {
-  setUploadStatus('Loading catalog from server…', 'loading', true);
-  try {
-    const res = await fetch('/api/products');
-    if (!res.ok) throw new Error(`Server error: ${res.status}`);
-    const data = await res.json();
-
-    if (data && data.length > 0) {
-      products = data;
-      setUploadStatus(`✓ Catalog loaded: ${products.length} products from server.`, 'ok');
-    } else {
-      setUploadStatus('No catalog on server yet. Upload an Excel file to get started.', '');
-    }
-  } catch (err) {
-    console.error('Load catalog error:', err);
-    setUploadStatus('Could not load catalog from server. Upload a file to start.', 'err');
-  }
-}
-
-/* ------------------------------------------------------------------
-   2. HANDLE EXCEL UPLOAD — sends to /api/upload
-   ------------------------------------------------------------------ */
-document.getElementById('excelFile').addEventListener('change', async function (e) {
+document.getElementById('excelFile').addEventListener('change', function (e) {
   const file = e.target.files[0];
   if (!file) return;
 
-  setUploadStatus(`Uploading "${file.name}" to server…`, 'loading', true);
+  const reader = new FileReader();
+  reader.onload = function (evt) {
+    try {
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
 
-  const formData = new FormData();
-  formData.append('catalog', file);
+      // Use the first sheet in the workbook
+      const firstSheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[firstSheetName];
 
-  try {
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData
-    });
-    const data = await res.json();
+      // Convert to an array of row objects, keyed by header text
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
-    if (!res.ok) {
-      throw new Error(data.error || 'Upload failed.');
+      const parsed = rows.map(mapRowToProduct).filter(p => p && p.name);
+
+      if (parsed.length === 0) {
+        setUploadStatus('No valid rows found. Check that your columns match the expected headers.', 'err');
+        return;
+      }
+
+      products = parsed;
+      setUploadStatus(`Loaded ${products.length} products from "${file.name}".`, 'ok');
+
+      // If the table is empty, add one starter row so the user sees it working
+      if (tableBody.children.length === 0) addRow();
+
+      // Save the uploaded sheet permanently on GitHub
+      uploadToGitHubDirectly(file);
+
+    } catch (err) {
+      console.error(err);
+      setUploadStatus('Could not read this file. Please upload a valid .xlsx or .xls file.', 'err');
     }
+  };
+  reader.readAsArrayBuffer(file);
+});
 
-    setUploadStatus(`✓ ${data.message}`, 'ok');
+// Maps a loosely-matched Excel row to {name, l, w, h}, tolerant of
+// header variations like "Length (L)", "Length", "L (cm)", etc.
+function mapRowToProduct(row) {
+  const keys = Object.keys(row);
 
-    // Reload products from server after successful upload
-    await loadCatalogFromServer();
+  const findKey = (patterns) =>
+    keys.find(k => patterns.some(p => k.toLowerCase().replace(/[^a-z]/g, '').includes(p)));
 
-    // Add a starter row if table is empty
-    if (tableBody.children.length === 0) addRow();
+  const nameKey = findKey(['productname', 'product', 'name', 'item']);
+  const lKey    = findKey(['length', 'l']);
+  const wKey    = findKey(['width', 'w']);
+  const hKey    = findKey(['height', 'h']);
 
-  } catch (err) {
-    console.error('Upload error:', err);
-    setUploadStatus(`Upload failed: ${err.message}`, 'err');
+  if (!nameKey) return null;
+
+  return {
+    name: String(row[nameKey]).trim(),
+    l: parseFloat(row[lKey]) || 0,
+    w: parseFloat(row[wKey]) || 0,
+    h: parseFloat(row[hKey]) || 0,
+  };
+}
+
+function setUploadStatus(msg, kind) {
+  uploadStatus.textContent = msg;
+  uploadStatus.className = kind || '';
+}
+
+async function uploadToGitHubDirectly(file) {
+  const token  = localStorage.getItem('gh_token');
+  const owner  = localStorage.getItem('gh_owner') || 'rutujak-bora';
+  const repo   = localStorage.getItem('gh_repo') || 'cost-calculator';
+  const branch = localStorage.getItem('gh_branch') || 'main';
+
+  if (!token) {
+    console.log('No GitHub Token configured. Skipping permanent catalog save.');
+    setUploadStatus(`Loaded locally. (Configure Admin Settings to save permanently to GitHub).`, 'ok');
+    return;
   }
 
-  // Reset file input so same file can be re-uploaded
-  e.target.value = '';
+  // Read file as Base64
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const base64Content = e.target.result.split(',')[1];
+    const apiPath = 'sample-products.xlsx';
+
+    try {
+      setUploadStatus('Saving catalog permanently to GitHub...', '');
+
+      // 1. Get the current file's SHA (required for file updates in GitHub API)
+      const getFileUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${apiPath}?ref=${branch}`;
+      const getResponse = await fetch(getFileUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json'
+        }
+      });
+
+      let sha = null;
+      if (getResponse.ok) {
+        const fileData = await getResponse.json();
+        sha = fileData.sha;
+      } else if (getResponse.status !== 404) {
+        throw new Error(`Failed to fetch file metadata (status ${getResponse.status}): ${getResponse.statusText}`);
+      }
+
+      // 2. Commit the updated file directly to the repository
+      const putFileUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${apiPath}`;
+      const putResponse = await fetch(putFileUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github+json'
+        },
+        body: JSON.stringify({
+          message: 'Update product catalog via web upload (client-side)',
+          content: base64Content,
+          sha: sha || undefined,
+          branch: branch
+        })
+      });
+
+      if (!putResponse.ok) {
+        const errData = await putResponse.json();
+        throw new Error(errData.message || putResponse.statusText);
+      }
+
+      setUploadStatus(`Loaded and permanently saved "${file.name}" to GitHub.`, 'ok');
+    } catch (err) {
+      console.error(err);
+      setUploadStatus(`Loaded locally, but failed to sync to GitHub: ${err.message}`, 'err');
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+// ============================================================
+// ADMIN SETTINGS MODAL INTERACTION
+// ============================================================
+const settingsBtn     = document.getElementById('settingsBtn');
+const settingsModal   = document.getElementById('settingsModal');
+const closeModal       = document.getElementById('closeModal');
+const saveSettingsBtn  = document.getElementById('saveSettingsBtn');
+
+const tokenInput       = document.getElementById('githubToken');
+const ownerInput       = document.getElementById('githubOwner');
+const repoInput        = document.getElementById('githubRepo');
+const branchInput      = document.getElementById('githubBranch');
+
+function loadSettings() {
+  tokenInput.value  = localStorage.getItem('gh_token') || '';
+  ownerInput.value  = localStorage.getItem('gh_owner') || 'rutujak-bora';
+  repoInput.value   = localStorage.getItem('gh_repo') || 'cost-calculator';
+  branchInput.value = localStorage.getItem('gh_branch') || 'main';
+}
+
+settingsBtn.addEventListener('click', () => {
+  loadSettings();
+  settingsModal.classList.add('open');
+});
+
+closeModal.addEventListener('click', () => {
+  settingsModal.classList.remove('open');
+});
+
+settingsModal.addEventListener('click', (e) => {
+  if (e.target === settingsModal) {
+    settingsModal.classList.remove('open');
+  }
+});
+
+saveSettingsBtn.addEventListener('click', () => {
+  localStorage.setItem('gh_token', tokenInput.value.trim());
+  localStorage.setItem('gh_owner', ownerInput.value.trim());
+  localStorage.setItem('gh_repo', repoInput.value.trim());
+  localStorage.setItem('gh_branch', branchInput.value.trim());
+  
+  settingsModal.classList.remove('open');
+  alert('Configuration saved in your browser locally.');
 });
 
 /* ------------------------------------------------------------------
-   3. MANIFEST TOOLBAR — addRow, bulkAdd, bulkPaste, clearAll
+   2. ROW MANAGEMENT
    ------------------------------------------------------------------ */
 document.getElementById('addRowBtn').addEventListener('click', () => addRow());
 
-document.getElementById('bulkAddBtn').addEventListener('click', () => {
-  const count = parseInt(document.getElementById('bulkAddCount').value) || 5;
-  for (let i = 0; i < count; i++) addRow();
-});
-
-document.getElementById('clearAllBtn').addEventListener('click', () => {
-  if (confirm('Clear all rows in the manifest?')) {
-    tableBody.innerHTML = '';
-    refreshEmptyState();
-    recalcGrandTotal();
-  }
-});
-
-// Bulk Paste Modal
-const bulkPasteModal    = document.getElementById('bulkPasteModal');
-const bulkPasteTextarea = document.getElementById('bulkPasteTextarea');
-
-document.getElementById('bulkPasteBtn').addEventListener('click', () => {
-  bulkPasteTextarea.value = '';
-  bulkPasteModal.classList.add('open');
-});
-document.getElementById('closePasteModal').addEventListener('click', () => bulkPasteModal.classList.remove('open'));
-bulkPasteModal.addEventListener('click', e => { if (e.target === bulkPasteModal) bulkPasteModal.classList.remove('open'); });
-
-document.getElementById('importPastedBtn').addEventListener('click', () => {
-  parseBulkPaste(bulkPasteTextarea.value);
-  bulkPasteModal.classList.remove('open');
-});
-
-function parseBulkPaste(text) {
-  const lines = text.split('\n');
-  let count = 0;
-  lines.forEach(line => {
-    if (!line.trim()) return;
-    let parts = line.split('\t');
-    if (parts.length < 2) {
-      const m = line.trim().match(/^(.*?)\s+(\d+)$/);
-      parts = m ? [m[1], m[2]] : [line.trim(), '1'];
-    }
-    const name = parts[0].trim();
-    const qty  = parseInt(parts[1]) || 1;
-    if (name) { addRow(name, qty); count++; }
-  });
-  if (count > 0) alert(`Imported ${count} rows.`);
-}
-
-/* ------------------------------------------------------------------
-   4. ADD ROW
-   ------------------------------------------------------------------ */
-function addRow(initialName = '', initialQty = 0) {
+function addRow() {
   rowCounter += 1;
   const id = rowCounter;
-
-  const exact = initialName
-    ? products.find(p => p.name.toLowerCase() === initialName.trim().toLowerCase())
-    : null;
 
   const tr = document.createElement('tr');
   tr.dataset.id = id;
@@ -936,16 +908,15 @@ function addRow(initialName = '', initialQty = 0) {
     <td class="row-index" data-label="#">${id}</td>
     <td data-label="Product">
       <div class="product-search">
-        <input class="product-input" type="text" autocomplete="off" placeholder="Search product…"
-          value="${initialName.replace(/"/g, '&quot;')}" />
+        <input class="product-input" type="text" autocomplete="off" placeholder="Search product…" />
         <div class="product-dropdown"></div>
       </div>
     </td>
-    <td data-label="Length (cm)"><input class="dim-input" data-dim="l" type="number" min="0" step="any" value="${exact ? exact.l : ''}" /></td>
-    <td data-label="Width (cm)"><input class="dim-input" data-dim="w" type="number" min="0" step="any" value="${exact ? exact.w : ''}" /></td>
-    <td data-label="Height (cm)"><input class="dim-input" data-dim="h" type="number" min="0" step="any" value="${exact ? exact.h : ''}" /></td>
+    <td data-label="Length (cm)"><input class="dim-input" data-dim="l" type="number" min="0" step="any" /></td>
+    <td data-label="Width (cm)"><input class="dim-input" data-dim="w" type="number" min="0" step="any" /></td>
+    <td data-label="Height (cm)"><input class="dim-input" data-dim="h" type="number" min="0" step="any" /></td>
     <td data-label="CBM (m³)"><span class="cbm-value">0.0000</span></td>
-    <td data-label="Quantity"><input class="qty-input" type="number" min="0" step="1" value="${initialQty}" /></td>
+    <td data-label="Quantity"><input class="qty-input" type="number" min="0" step="1" value="0" /></td>
     <td data-label="Freight Volume (m³)"><span class="freight-value">0.0000</span></td>
     <td data-label=""><button class="remove-btn" title="Remove row">&times;</button></td>
   `;
@@ -953,14 +924,11 @@ function addRow(initialName = '', initialQty = 0) {
   refreshEmptyState();
 
   const productInput = tr.querySelector('.product-input');
-  const dropdown     = tr.querySelector('.product-dropdown');
-  const qtyInput     = tr.querySelector('.qty-input');
+  const dropdown      = tr.querySelector('.product-dropdown');
+  const qtyInput       = tr.querySelector('.qty-input');
+  const removeBtn      = tr.querySelector('.remove-btn');
 
-  function closeDropdown() {
-    dropdown.classList.remove('open');
-    dropdown.innerHTML = '';
-  }
-
+  // Fills L/W/H from a chosen product and recalculates CBM / Freight Volume.
   function selectProduct(p) {
     productInput.value = p.name;
     tr.querySelector('[data-dim="l"]').value = p.l;
@@ -970,6 +938,20 @@ function addRow(initialName = '', initialQty = 0) {
     recalcRow(tr);
   }
 
+  function clearDims() {
+    tr.querySelector('[data-dim="l"]').value = '';
+    tr.querySelector('[data-dim="w"]').value = '';
+    tr.querySelector('[data-dim="h"]').value = '';
+    recalcRow(tr);
+  }
+
+  function closeDropdown() {
+    dropdown.classList.remove('open');
+    dropdown.innerHTML = '';
+  }
+
+  // Renders the filtered product list below the input. Shows the full
+  // catalog on focus (empty query), narrows as the user types.
   function openDropdown() {
     if (products.length === 0) {
       dropdown.innerHTML = '<div class="no-match">Upload an Excel file above to search products.</div>';
@@ -977,9 +959,11 @@ function addRow(initialName = '', initialQty = 0) {
       return;
     }
     const query = productInput.value.trim().toLowerCase();
-    const matches = query ? products.filter(p => p.name.toLowerCase().includes(query)) : products;
+    const matches = query
+      ? products.filter(p => p.name.toLowerCase().includes(query))
+      : products;
 
-    if (!matches.length) {
+    if (matches.length === 0) {
       dropdown.innerHTML = '<div class="no-match">No matching products.</div>';
       dropdown.classList.add('open');
       return;
@@ -994,7 +978,9 @@ function addRow(initialName = '', initialQty = 0) {
     dropdown.classList.add('open');
 
     dropdown.querySelectorAll('.product-option').forEach(opt => {
-      opt.addEventListener('mousedown', e => {
+      // mousedown (not click) fires before the input's blur event,
+      // so the selection registers before the dropdown closes on blur
+      opt.addEventListener('mousedown', (e) => {
         e.preventDefault();
         const match = products.find(p => p.name === opt.dataset.name);
         if (match) selectProduct(match);
@@ -1005,6 +991,8 @@ function addRow(initialName = '', initialQty = 0) {
   productInput.addEventListener('focus', openDropdown);
   productInput.addEventListener('input', () => {
     openDropdown();
+    // Only auto-fill if what's typed is an exact match; otherwise clear
+    // dimensions so a half-typed product doesn't carry stale numbers.
     const exact = products.find(p => p.name.toLowerCase() === productInput.value.trim().toLowerCase());
     if (exact) {
       tr.querySelector('[data-dim="l"]').value = exact.l;
@@ -1012,40 +1000,89 @@ function addRow(initialName = '', initialQty = 0) {
       tr.querySelector('[data-dim="h"]').value = exact.h;
       recalcRow(tr);
     } else {
-      tr.querySelector('[data-dim="l"]').value = '';
-      tr.querySelector('[data-dim="w"]').value = '';
-      tr.querySelector('[data-dim="h"]').value = '';
-      recalcRow(tr);
+      clearDims();
     }
   });
   productInput.addEventListener('blur', closeDropdown);
 
   qtyInput.addEventListener('input', () => recalcRow(tr));
-  tr.querySelectorAll('.dim-input').forEach(inp => inp.addEventListener('input', () => recalcRow(tr)));
+  tr.querySelectorAll('.dim-input').forEach(input => {
+    input.addEventListener('input', () => recalcRow(tr));
+  });
 
-  tr.querySelector('.remove-btn').addEventListener('click', () => {
+  removeBtn.addEventListener('click', () => {
     tr.remove();
     refreshEmptyState();
     recalcGrandTotal();
   });
+}
 
-  if (initialName || initialQty) recalcRow(tr);
+function refreshEmptyState() {
+  emptyState.style.display = tableBody.children.length === 0 ? 'block' : 'none';
 }
 
 /* ------------------------------------------------------------------
-   5. CALCULATIONS
+   4. DOWNLOAD RESULTS
+   Exports the current table (one row per product line + a grand
+   total row) as a .xlsx file using SheetJS, entirely client-side.
+   ------------------------------------------------------------------ */
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  const rows = Array.from(tableBody.querySelectorAll('tr'));
+
+  if (rows.length === 0) {
+    alert('Add at least one row before downloading.');
+    return;
+  }
+
+  const exportData = rows.map((tr, i) => ({
+    '#': i + 1,
+    'Product Name': tr.querySelector('.product-input').value || '',
+    'Length (cm)': parseFloat(tr.querySelector('[data-dim="l"]').value) || 0,
+    'Width (cm)': parseFloat(tr.querySelector('[data-dim="w"]').value) || 0,
+    'Height (cm)': parseFloat(tr.querySelector('[data-dim="h"]').value) || 0,
+    'CBM (m3)': parseFloat(tr.querySelector('.cbm-value').textContent) || 0,
+    'Quantity': parseFloat(tr.querySelector('.qty-input').value) || 0,
+    'Freight Volume (m3)': parseFloat(tr.querySelector('.freight-value').textContent) || 0,
+  }));
+
+  // Append a blank spacer row, then the grand total, so it's visually
+  // separated from the line items when opened in Excel.
+  exportData.push({});
+  exportData.push({
+    'Product Name': 'Grand Total',
+    'Freight Volume (m3)': parseFloat(grandTotalEl.textContent) || 0,
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(exportData);
+  worksheet['!cols'] = [
+    { wch: 4 }, { wch: 24 }, { wch: 12 }, { wch: 12 },
+    { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 18 },
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Freight Calculation');
+
+  const timestamp = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(workbook, `freight-calculation-${timestamp}.xlsx`);
+});
+
+/* ------------------------------------------------------------------
+   3. CALCULATIONS
+   CBM = (Length × Width × Height) / 1,000,000
+   Freight Volume = CBM × Quantity
    ------------------------------------------------------------------ */
 function recalcRow(tr) {
-  const l   = parseFloat(tr.querySelector('[data-dim="l"]').value) || 0;
-  const w   = parseFloat(tr.querySelector('[data-dim="w"]').value) || 0;
-  const h   = parseFloat(tr.querySelector('[data-dim="h"]').value) || 0;
-  const qty = parseFloat(tr.querySelector('.qty-input').value)     || 0;
+  const l = parseFloat(tr.querySelector('[data-dim="l"]').value) || 0;
+  const w = parseFloat(tr.querySelector('[data-dim="w"]').value) || 0;
+  const h = parseFloat(tr.querySelector('[data-dim="h"]').value) || 0;
+  const qty = parseFloat(tr.querySelector('.qty-input').value) || 0;
 
-  const cbm     = (l * w * h) / 1_000_000;
+  const cbm = (l * w * h) / 1000000;
   const freight = cbm * qty;
 
-  tr.querySelector('.cbm-value').textContent     = cbm.toFixed(4);
+  tr.querySelector('.cbm-value').textContent = cbm.toFixed(4);
   tr.querySelector('.freight-value').textContent = freight.toFixed(4);
+
   recalcGrandTotal();
 }
 
@@ -1057,46 +1094,81 @@ function recalcGrandTotal() {
   grandTotalEl.textContent = total.toFixed(4);
 }
 
-function refreshEmptyState() {
-  emptyState.style.display = tableBody.children.length === 0 ? 'block' : 'none';
-}
-
 /* ------------------------------------------------------------------
-   6. DOWNLOAD RESULTS AS .xlsx
-   ------------------------------------------------------------------ */
-document.getElementById('downloadBtn').addEventListener('click', () => {
-  const rows = Array.from(tableBody.querySelectorAll('tr'));
-  if (!rows.length) { alert('Add at least one row before downloading.'); return; }
-
-  const exportData = rows.map((tr, i) => ({
-    '#': i + 1,
-    'Product Name':           tr.querySelector('.product-input').value || '',
-    'Length (cm)':            parseFloat(tr.querySelector('[data-dim="l"]').value) || 0,
-    'Width (cm)':             parseFloat(tr.querySelector('[data-dim="w"]').value) || 0,
-    'Height (cm)':            parseFloat(tr.querySelector('[data-dim="h"]').value) || 0,
-    'CBM (m3)':               parseFloat(tr.querySelector('.cbm-value').textContent) || 0,
-    'Quantity':               parseFloat(tr.querySelector('.qty-input').value) || 0,
-    'Freight Volume (m3)':    parseFloat(tr.querySelector('.freight-value').textContent) || 0,
-  }));
-
-  exportData.push({});
-  exportData.push({ 'Product Name': 'Grand Total', 'Freight Volume (m3)': parseFloat(grandTotalEl.textContent) || 0 });
-
-  const ws = XLSX.utils.json_to_sheet(exportData);
-  ws['!cols'] = [{ wch: 4 }, { wch: 24 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 18 }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Freight Calculation');
-  XLSX.writeFile(wb, `freight-calculation-${new Date().toISOString().slice(0, 10)}.xlsx`);
-});
-
-/* ------------------------------------------------------------------
-   INIT
+   INIT — start with two empty rows so the UI isn't blank on load
    ------------------------------------------------------------------ */
 addRow();
 addRow();
 refreshEmptyState();
-loadCatalogFromServer();
+loadDefaultCatalog();
+
+async function loadDefaultCatalog() {
+  if (window.location.protocol === 'file:') {
+    setUploadStatus('Running locally via file://. Please upload an Excel file manually to search products.', 'err');
+    return;
+  }
+  try {
+    setUploadStatus('Loading default product catalog...', '');
+    const response = await fetch('sample-products.xlsx');
+    if (!response.ok) {
+      throw new Error(`Failed to fetch: ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const data = new Uint8Array(arrayBuffer);
+    const workbook = XLSX.read(data, { type: 'array' });
+
+    const firstSheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[firstSheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    const parsed = rows.map(mapRowToProduct).filter(p => p && p.name);
+
+    if (parsed.length > 0) {
+      products = parsed;
+      setUploadStatus(`Default catalog loaded: ${products.length} products.`, 'ok');
+    } else {
+      setUploadStatus('Default catalog is empty or invalid.', 'err');
+    }
+  } catch (err) {
+    console.error(err);
+    setUploadStatus('Could not load default catalog. You can still upload manually.', 'err');
+  }
+}
 </script>
+
+  <!-- ============================================================
+       ADMIN SETTINGS MODAL HTML
+       ============================================================ -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Admin Config</h3>
+        <button class="close-modal" id="closeModal" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>To enable permanent file saving from this browser directly to GitHub, configure your GitHub Personal Access Token (classic) with <code>repo</code> write permission.</p>
+        <div class="form-group">
+          <label for="githubToken">GitHub Token (saved locally in your browser)</label>
+          <input type="password" id="githubToken" placeholder="ghp_..." autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="githubOwner">GitHub Owner / Organization</label>
+          <input type="text" id="githubOwner" value="rutujak-bora" />
+        </div>
+        <div class="form-group">
+          <label for="githubRepo">Repository Name</label>
+          <input type="text" id="githubRepo" value="cost-calculator" />
+        </div>
+        <div class="form-group">
+          <label for="githubBranch">Branch</label>
+          <input type="text" id="githubBranch" value="main" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="save-modal-btn" id="saveSettingsBtn" type="button">Save Config</button>
+      </div>
+    </div>
+  </div>
 
 </body>
 </html>
